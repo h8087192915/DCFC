@@ -1,0 +1,23 @@
+public with sharing class NewOpportunityOverrideController {
+    private final Opportunity opp;
+    private final ApexPages.StandardController standardController;
+    
+    public NewOpportunityOverrideController(ApexPages.StandardController stdController) {
+        this.opp = (Opportunity)stdController.getRecord();
+        this.standardController = stdController;
+    }
+    
+    public PageReference save() {
+        try {
+            insert opp;
+            return new PageReference('/' + opp.Id);
+        } catch(Exception e) {
+            ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, e.getMessage()));
+            return null;
+        }
+    }
+    
+    public PageReference cancel() {
+        return new PageReference('/' + Schema.SObjectType.Opportunity.getKeyPrefix() + '/o');
+    }
+}

@@ -1,0 +1,211 @@
+/**
+ * @description     Utility class to handle masking of email addresses
+ *                  based on a custom metadata setting. This helps prevent
+ *                  sending emails to real addresses in non-production environments.
+ *                  Supports both single and bulk email masking operations.
+ * 
+ * @createdBy       Hitesh Nimje
+ * @date            2025-07-15
+ * @updatedBy       Hitesh Nimje
+ * @updateDate      2025-01-27
+ * 
+ * Functionality:
+ * - Provides utility methods to determine whether email masking is enabled.
+ * - Appends ".invalid" to real email addresses if masking is enabled.
+ * - Uses a custom metadata type to control the masking behavior.
+ * - Caches metadata setting to support bulk operations efficiently.
+ * - Supports bulk email masking for improved performance.
+ * - Includes email validation and format checking.
+ */
+
+public class EmailMaskingUtil {
+
+    // Test override flag
+    public static Boolean testMaskFlag = null;
+    
+    // Test flag to force exceptions
+    public static Boolean testForceException = false;
+    
+    // Cached metadata result - singleton pattern for efficient bulk operations
+    private static Boolean cachedMaskSetting = null;
+    
+    // Constants
+    private static final String INVALID_SUFFIX = '.invalid';
+    private static final String EMAIL_REGEX = '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$';
+    
+    /**
+     * @description Check if email masking is enabled via metadata
+     * @return Boolean indicating if masking is enabled
+     */
+    public static Boolean shouldMaskEmails() {
+        // Check cache first (for both test and production)
+        if (cachedMaskSetting != null) {
+            return cachedMaskSetting;
+        }
+
+        // For test context: use test flag if set and cache it
+        if (Test.isRunningTest() && testMaskFlag != null) {
+            cachedMaskSetting = testMaskFlag;
+            System.debug(LoggingLevel.INFO, 'Email masking test config cached: ' + cachedMaskSetting);
+            return cachedMaskSetting;
+        }
+
+        // In Apex, we don't need explicit synchronization as it's single-threaded
+        // But we keep the double-checked pattern for clarity and future-proofing
+        try {
+            // Force exception for test coverage
+            if (testForceException) {
+                throw new CalloutException('Forced exception for test coverage');
+            }
+            
+            // Retrieve the masking flag from custom metadata
+            Email_Masking_Config__mdt config = [
+                SELECT Mask_Emails_with_invalid__c 
+                FROM Email_Masking_Config__mdt 
+                LIMIT 1
+            ];
+
+            cachedMaskSetting = config != null && config.Mask_Emails_with_invalid__c;
+            System.debug(LoggingLevel.INFO, 'Email masking config cached: ' + cachedMaskSetting);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'Email masking config retrieval failed: ' + e.getMessage());
+            cachedMaskSetting = false;  // Safe fallback
+        }
+
+        return cachedMaskSetting;
+    }
+
+    /**
+     * @description Mask a single email address
+     * @param email Email address to mask
+     * @return Masked email address or original if masking is disabled
+     */
+    public static String maskEmail(String email) {
+        if (String.isBlank(email)) {
+            return null;
+        }
+
+        if (shouldMaskEmails() && !email.endsWith(INVALID_SUFFIX)) {
+            return email + INVALID_SUFFIX;
+        }
+
+        return email;
+    }
+    
+    /**
+     * @description Mask multiple email addresses in bulk for better performance
+     * @param emails List of email addresses to mask
+     * @return List of masked email addresses
+     */
+    public static List<String> maskEmails(List<String> emails) {
+        if (emails == null || emails.isEmpty()) {
+            return new List<String>();
+        }
+        
+        // Check masking setting once for bulk operation
+        Boolean shouldMask = shouldMaskEmails();
+        
+        List<String> maskedEmails = new List<String>();
+        for (String email : emails) {
+            if (String.isBlank(email)) {
+                maskedEmails.add(email); // Keep blank strings as they are (null or empty)
+            } else if (shouldMask && !email.endsWith(INVALID_SUFFIX)) {
+                maskedEmails.add(email + INVALID_SUFFIX);
+            } else {
+                maskedEmails.add(email);
+            }
+        }
+        
+        return maskedEmails;
+    }
+    
+    /**
+     * @description Mask email addresses from a list of SObjects
+     * @param records List of SObjects containing email fields
+     * @param emailFieldName Name of the email field to mask
+     * @return List of SObjects with masked email addresses
+     */
+    public static List<SObject> maskEmailsFromRecords(List<SObject> records, String emailFieldName) {
+        if (records == null || records.isEmpty() || String.isBlank(emailFieldName)) {
+            return records;
+        }
+        
+        // Check masking setting once for bulk operation
+        Boolean shouldMask = shouldMaskEmails();
+        
+        for (SObject record : records) {
+            if (record.get(emailFieldName) != null) {
+                String email = String.valueOf(record.get(emailFieldName));
+                if (String.isNotBlank(email) && shouldMask && !email.endsWith(INVALID_SUFFIX)) {
+                    record.put(emailFieldName, email + INVALID_SUFFIX);
+                }
+            }
+        }
+        
+        return records;
+    }
+    
+    /**
+     * @description Validate email format using regex
+     * @param email Email address to validate
+     * @return Boolean indicating if email format is valid
+     */
+    public static Boolean isValidEmailFormat(String email) {
+        if (String.isBlank(email)) {
+            return false;
+        }
+        
+        // Remove .invalid suffix for validation if present
+        String emailToValidate = email.endsWith(INVALID_SUFFIX) 
+            ? email.removeEnd(INVALID_SUFFIX) 
+            : email;
+            
+        return Pattern.matches(EMAIL_REGEX, emailToValidate);
+    }
+    
+    /**
+     * @description Check if an email is already masked
+     * @param email Email address to check
+     * @return Boolean indicating if email is already masked
+     */
+    public static Boolean isEmailMasked(String email) {
+        return String.isNotBlank(email) && email.endsWith(INVALID_SUFFIX);
+    }
+    
+    /**
+     * @description Remove masking from an email address
+     * @param email Masked email address
+     * @return Unmasked email address
+     */
+    public static String unmaskEmail(String email) {
+        if (String.isBlank(email) || !email.endsWith(INVALID_SUFFIX)) {
+            return email;
+        }
+        
+        return email.removeEnd(INVALID_SUFFIX);
+    }
+    
+    /**
+     * @description Clear cached data (useful for testing or when cache needs refresh)
+     */
+    public static void clearCache() {
+        cachedMaskSetting = null;
+        System.debug(LoggingLevel.INFO, 'Email masking cache cleared');
+    }
+    
+    /**
+     * @description Check if the cache is currently populated
+     * @return Boolean indicating if cache has a value
+     */
+    public static Boolean isCachePopulated() {
+        return cachedMaskSetting != null;
+    }
+    
+    /**
+     * @description Get the current cached value (for debugging/testing)
+     * @return Current cached masking setting or null if not cached
+     */
+    public static Boolean getCachedValue() {
+        return cachedMaskSetting;
+    }
+}

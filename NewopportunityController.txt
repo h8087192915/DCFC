@@ -1,0 +1,67 @@
+
+public with sharing class NewOpportunityController {
+    
+    // ========================================
+    // LIGHTNING WEB COMPONENT METHODS
+    // ========================================
+    
+    /**
+     * @description Create opportunity from Lightning Web Component
+     * @param name Opportunity name
+     * @param accountId Account ID
+     * @return Opportunity ID
+     */
+    @AuraEnabled
+    public static String createOpportunity(String name, String accountId) {
+        try {
+            Opportunity opp = new Opportunity(
+                Name = name,
+                AccountId = accountId,
+                CloseDate = Date.today().addDays(14),
+                StageName = 'Needs Analysis'
+            );
+            insert opp;
+            return opp.Id;
+        } catch (Exception e) {
+            throw new AuraHandledException(e.getMessage());
+        }
+    }
+    
+    // ========================================
+    // VISUALFORCE PAGE METHODS
+    // ========================================
+    
+    private final Opportunity opp;
+    private final ApexPages.StandardController standardController;
+    
+    /**
+     * @description Constructor for Visualforce page
+     * @param stdController Standard controller
+     */
+    public NewOpportunityController(ApexPages.StandardController stdController) {
+        this.opp = (Opportunity)stdController.getRecord();
+        this.standardController = stdController;
+    }
+    
+    /**
+     * @description Save opportunity from Visualforce page
+     * @return PageReference to created opportunity or null if error
+     */
+    public PageReference save() {
+        try {
+            insert opp;
+            return new PageReference('/' + opp.Id);
+        } catch(Exception e) {
+            ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, e.getMessage()));
+            return null;
+        }
+    }
+    
+    /**
+     * @description Cancel operation from Visualforce page
+     * @return PageReference to opportunity list view
+     */
+    public PageReference cancel() {
+        return new PageReference('/' + Schema.SObjectType.Opportunity.getKeyPrefix() + '/o');
+    }
+}

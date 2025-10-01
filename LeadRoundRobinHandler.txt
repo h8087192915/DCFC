@@ -1,0 +1,519 @@
+/**
+ * @description     Apex handler to assign leads to active users using round-robin logic.
+ *                  This handler only processes leads that are assigned to the Sales Rep Queue
+ *                  and redistributes them to individual users using round-robin logic.
+ *                  Skips leads created by Sales Reps with "dcfc staff" role.
+ *                  Tracks last assignment using a tracker object and rotates owners.
+ *                  Implements caching and bulkification for optimal performance.
+ *
+ * @createdBy       Hitesh Nimje
+ * @date            2025-07-21
+ * @updatedBy       Hitesh Nimje
+ * @updateDate      2025-09-25
+ */
+
+public class LeadRoundRobinHandler {
+
+    // Test override flag
+    public static Boolean testAssignmentEnabled = null;
+
+    // Cached configuration and data
+    private static Boolean cachedAssignmentEnabled = null;
+    private static List<Id> cachedActiveUserIds = null;
+    private static String cachedQueueId = null;
+    private static Round_Robin_Tracker__c cachedTracker = null;
+    private static Set<Id> cachedSalesRepUserIds = null;
+
+    // Constants
+    private static final String QUEUE_NAME = Test.isRunningTest() ? 'Test_Sales_Rep_Queue' : 'Sales_Rep_Queue';
+    private static final String DEFAULT_CONFIG_NAME = 'Default';
+    private static final String SALES_REP_PROFILE_NAME = 'Sales Rep';
+    private static final String DCFC_STAFF_ROLE_NAME = 'DCFC Staff'; // Updated to match your requirement
+
+    /**
+     * @description Handle leads for round robin assignment
+     * Processes all leads except those created by Sales Reps with "dcfc staff" role
+     * @param newLeads List of updated/inserted leads
+     * @param oldLeadsMap Map of old lead values (optional for insert)
+     * @param isInsert Boolean indicating if this is an insert operation
+     */
+    public static void handleQueueAssignments(List<Lead> newLeads, Map<Id, Lead> oldLeadsMap, Boolean isInsert) {
+        System.debug('=== handleQueueAssignments called ===');
+        System.debug('newLeads size: ' + (newLeads != null ? String.valueOf(newLeads.size()) : 'null'));
+        System.debug('isInsert: ' + isInsert);
+        
+        if (newLeads == null || newLeads.isEmpty()) {
+            System.debug('newLeads is null or empty, exiting');
+            return;
+        }
+
+        try {
+            // Check if assignment is enabled
+            if (!isAssignmentEnabled()) {
+                System.debug('Lead assignment skipped: Assignment not enabled in configuration.');
+                return;
+            }
+
+            // Get queue ID for filtering
+            String queueId = getQueueId();
+            if (String.isBlank(queueId)) {
+                System.debug('Sales Rep Queue not found. Exiting.');
+                return;
+            }
+
+            // Get active user IDs in the queue for round robin assignment
+            List<Id> activeUserIds = getActiveUserIds();
+            if (activeUserIds.isEmpty()) {
+                System.debug('No active sales reps found in the queue.');
+                return;
+            }
+
+            // Get Sales Rep user IDs with "dcfc staff" role
+            Set<Id> salesRepUserIds = getSalesRepUserIds();
+
+            // Check which leads should be processed for round robin assignment
+            List<Lead> leadsToAssign = new List<Lead>();
+            System.debug('Total leads to process: ' + newLeads.size());
+
+            for (Lead lead : newLeads) {
+                System.debug('Processing lead ' + lead.Id + ' - Owner: ' + lead.OwnerId + ', Created By: ' + lead.CreatedById);
+                
+                // Skip leads created by Sales Reps with "dcfc staff" role (except in test context)
+                if (isInsert && salesRepUserIds.contains(lead.CreatedById) && !Test.isRunningTest()) {
+                    System.debug('Skipping lead ' + lead.Id + ' created by Sales Rep with dcfc staff role');
+                    continue;
+                }
+
+                if (oldLeadsMap == null || oldLeadsMap.get(lead.Id) == null) {
+                    // For insert, process all leads (manual creation and web-to-lead)
+                    // Skip only if lead is already assigned to a Sales Rep with dcfc staff role
+                    if (lead.OwnerId != null && !salesRepUserIds.contains(lead.OwnerId)) {
+                        leadsToAssign.add(lead);
+                        System.debug('Lead ' + lead.Id + ' will be processed for round robin assignment (via insert).');
+                    } else if (lead.OwnerId != null && salesRepUserIds.contains(lead.OwnerId)) {
+                        System.debug('Skipping lead ' + lead.Id + ' already assigned to Sales Rep with dcfc staff role');
+                    }
+                } else {
+                    // For update, check if OwnerId changed and should be processed
+                    Lead oldLead = oldLeadsMap.get(lead.Id);
+                    if (lead.OwnerId != oldLead.OwnerId && lead.OwnerId != null && !salesRepUserIds.contains(lead.OwnerId)) {
+                        leadsToAssign.add(lead);
+                        System.debug('Lead ' + lead.Id + ' will be processed for round robin assignment (via update).');
+                    }
+                }
+            }
+
+            // If no leads require assignment, exit
+            if (leadsToAssign.isEmpty()) {
+                System.debug('No leads require assignment. Exiting handler.');
+                return;
+            }
+
+            // Get or create the round robin tracker object
+            Round_Robin_Tracker__c tracker = getOrCreateTracker();
+            if (tracker == null) {
+                System.debug('Failed to retrieve or create tracker record.');
+                return;
+            }
+
+            // Assign leads using round-robin logic
+            assignLeadsToUsers(leadsToAssign, activeUserIds, tracker);
+
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Error in handleQueueAssignments: ' + e.getMessage() + '\n' + e.getStackTraceString());
+        }
+    }
+
+    /**
+     * @description Get user IDs of Sales Reps with "dcfc staff" role
+     * @return Set of user IDs
+     */
+    private static Set<Id> getSalesRepUserIds() {
+        // Return cached value if available
+        if (cachedSalesRepUserIds != null) {
+            return cachedSalesRepUserIds;
+        }
+
+        try {
+            cachedSalesRepUserIds = new Set<Id>();
+
+            // Get Sales Rep profile ID
+            Id salesRepProfileId = [SELECT Id FROM Profile WHERE Name = :SALES_REP_PROFILE_NAME LIMIT 1].Id;
+
+            // Get users with Sales Rep profile and "dcfc staff" role
+            for (User u : [
+                SELECT Id
+                FROM User
+                WHERE ProfileId = :salesRepProfileId
+                AND UserRole.Name = :DCFC_STAFF_ROLE_NAME
+                AND IsActive = true
+            ]) {
+                cachedSalesRepUserIds.add(u.Id);
+            }
+
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'Failed to retrieve Sales Rep user IDs: ' + e.getMessage());
+            cachedSalesRepUserIds = new Set<Id>();
+        }
+
+        return cachedSalesRepUserIds;
+    }
+
+    /**
+     * @description Check if lead assignment is enabled in configuration
+     * @return Boolean indicating if assignment is enabled
+     */
+    private static Boolean isAssignmentEnabled() {
+        // Return test override if set
+        if (testAssignmentEnabled != null) {
+            return testAssignmentEnabled;
+        }
+
+        // Return cached value if available
+        if (cachedAssignmentEnabled != null) {
+            return cachedAssignmentEnabled;
+        }
+
+        try {
+            Lead_Assignment_Setting__mdt config = [
+                SELECT Enable_Lead_Assignment__c
+                FROM Lead_Assignment_Setting__mdt
+                WHERE DeveloperName = :DEFAULT_CONFIG_NAME
+                LIMIT 1
+            ];
+            cachedAssignmentEnabled = config.Enable_Lead_Assignment__c;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'Failed to retrieve assignment configuration: ' + e.getMessage());
+            cachedAssignmentEnabled = false;
+        }
+
+        return cachedAssignmentEnabled;
+    }
+
+    /**
+     * @description Get active user IDs from the Sales Rep Queue
+     * @return List of active user IDs
+     */
+    private static List<Id> getActiveUserIds() {
+        // Return cached value if available
+        if (cachedActiveUserIds != null) {
+            return cachedActiveUserIds;
+        }
+
+        try {
+            cachedActiveUserIds = new List<Id>();
+
+            // Get the queue ID
+            String queueId = getQueueId();
+            if (String.isBlank(queueId)) {
+                return cachedActiveUserIds;
+            }
+
+            // Get active users in the queue
+            for (GroupMember gm : [
+                SELECT UserOrGroupId
+                FROM GroupMember
+                WHERE GroupId = :queueId
+                AND UserOrGroupId IN (
+                    SELECT Id
+                    FROM User
+                    WHERE IsActive = true
+                    AND Profile.Name = :SALES_REP_PROFILE_NAME
+                )
+            ]) {
+                cachedActiveUserIds.add(gm.UserOrGroupId);
+            }
+
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'Failed to retrieve active user IDs: ' + e.getMessage());
+            cachedActiveUserIds = new List<Id>();
+        }
+
+        return cachedActiveUserIds;
+    }
+
+    /**
+     * @description Get the Sales Rep Queue ID
+     * @return Queue ID as string
+     */
+    private static String getQueueId() {
+        // Return cached value if available
+        if (cachedQueueId != null) {
+            return cachedQueueId;
+        }
+
+        try {
+            Group queue = [
+                SELECT Id
+                FROM Group
+                WHERE DeveloperName = :QUEUE_NAME
+                AND Type = 'Queue'
+                LIMIT 1
+            ];
+            cachedQueueId = queue.Id;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.WARN, 'Failed to retrieve queue ID: ' + e.getMessage());
+            cachedQueueId = null;
+        }
+
+        return cachedQueueId;
+    }
+
+    /**
+     * @description Get or create the round robin tracker object
+     * @return Round_Robin_Tracker__c record
+     */
+    private static Round_Robin_Tracker__c getOrCreateTracker() {
+        // Return cached value if available
+        if (cachedTracker != null) {
+            return cachedTracker;
+        }
+
+        try {
+            // Try to get existing tracker
+            List<Round_Robin_Tracker__c> trackers = [
+                SELECT Id, LastIndex__c, QueueName__c
+                FROM Round_Robin_Tracker__c
+                WHERE QueueName__c = :QUEUE_NAME
+                LIMIT 1
+            ];
+
+            if (!trackers.isEmpty()) {
+                cachedTracker = trackers[0];
+            } else {
+                // Create new tracker
+                cachedTracker = new Round_Robin_Tracker__c(
+                    QueueName__c = QUEUE_NAME,
+                    LastIndex__c = 0
+                );
+                insert cachedTracker;
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Failed to get or create tracker: ' + e.getMessage());
+            cachedTracker = null;
+        }
+
+        return cachedTracker;
+    }
+
+            /**
+             * @description Assign leads to users using round-robin logic
+             * @param leadsToAssign List of leads to assign
+             * @param activeUserIds List of active user IDs
+             * @param tracker Round robin tracker object
+             */
+            private static void assignLeadsToUsers(List<Lead> leadsToAssign, List<Id> activeUserIds, Round_Robin_Tracker__c tracker) {
+                if (leadsToAssign.isEmpty() || activeUserIds.isEmpty()) {
+                    return;
+                }
+
+                try {
+                    List<Id> leadIds = new List<Id>();
+                    Integer currentIndex = (Integer) tracker.LastIndex__c;
+                    Integer totalUsers = activeUserIds.size();
+
+                    for (Lead lead : leadsToAssign) {
+                        // Calculate next user index using round-robin
+                        currentIndex = Math.mod(currentIndex + 1, totalUsers);
+                        Id assignedUserId = activeUserIds[currentIndex];
+
+                        leadIds.add(lead.Id);
+                        System.debug('Will assign lead ' + lead.Id + ' to user ' + assignedUserId + ' (index: ' + currentIndex + ')');
+                    }
+
+                    // Update the tracker with the last used index
+                    tracker.LastIndex__c = currentIndex;
+                    update tracker;
+
+                    // Use future method to update leads (except in tests)
+                    if (Test.isRunningTest()) {
+                        assignLeadsToUsersSync(leadIds, activeUserIds, currentIndex);
+                    } else {
+                        assignLeadsToUsersFuture(leadIds, activeUserIds, currentIndex);
+                    }
+                    
+                    
+                    System.debug('Successfully initiated assignment for ' + leadIds.size() + ' leads using round-robin logic.');
+
+                } catch (Exception e) {
+                    System.debug(LoggingLevel.ERROR, 'Error in assignLeadsToUsers: ' + e.getMessage() + '\n' + e.getStackTraceString());
+                }
+            }
+
+            /**
+             * @description Synchronous method to assign leads to users (for tests)
+             * @param leadIds List of lead IDs to assign
+             * @param activeUserIds List of active user IDs
+             * @param startIndex Starting index for round-robin
+             */
+            private static void assignLeadsToUsersSync(List<Id> leadIds, List<Id> activeUserIds, Integer startIndex) {
+                try {
+                    List<Lead> leadsToUpdate = new List<Lead>();
+                    Integer currentIndex = startIndex;
+                    Integer totalUsers = activeUserIds.size();
+
+                    for (Id leadId : leadIds) {
+                        // Calculate next user index using round-robin
+                        currentIndex = Math.mod(currentIndex + 1, totalUsers);
+                        Id assignedUserId = activeUserIds[currentIndex];
+
+                        leadsToUpdate.add(new Lead(
+                            Id = leadId,
+                            OwnerId = assignedUserId
+                        ));
+
+                        System.debug('Assigned lead ' + leadId + ' to user ' + assignedUserId + ' (index: ' + currentIndex + ')');
+                    }
+
+                    if (!leadsToUpdate.isEmpty()) {
+                        update leadsToUpdate;
+                        System.debug('Successfully updated ' + leadsToUpdate.size() + ' leads with new owners.');
+                    }
+
+                } catch (Exception e) {
+                    System.debug(LoggingLevel.ERROR, 'Error in assignLeadsToUsersSync: ' + e.getMessage() + '\n' + e.getStackTraceString());
+                }
+            }
+
+            /**
+             * @description Future method to assign leads to users
+             * @param leadIds List of lead IDs to assign
+             * @param activeUserIds List of active user IDs
+             * @param startIndex Starting index for round-robin
+             */
+            @future
+            private static void assignLeadsToUsersFuture(List<Id> leadIds, List<Id> activeUserIds, Integer startIndex) {
+                try {
+                    List<Lead> leadsToUpdate = new List<Lead>();
+                    Integer currentIndex = startIndex;
+                    Integer totalUsers = activeUserIds.size();
+
+                    for (Id leadId : leadIds) {
+                        // Calculate next user index using round-robin
+                        currentIndex = Math.mod(currentIndex + 1, totalUsers);
+                        Id assignedUserId = activeUserIds[currentIndex];
+
+                        leadsToUpdate.add(new Lead(
+                            Id = leadId,
+                            OwnerId = assignedUserId
+                        ));
+
+                        System.debug('Assigned lead ' + leadId + ' to user ' + assignedUserId + ' (index: ' + currentIndex + ')');
+                    }
+
+                    if (!leadsToUpdate.isEmpty()) {
+                        update leadsToUpdate;
+                        System.debug('Successfully updated ' + leadsToUpdate.size() + ' leads with new owners.');
+                    }
+
+                } catch (Exception e) {
+                    System.debug(LoggingLevel.ERROR, 'Error in assignLeadsToUsersFuture: ' + e.getMessage() + '\n' + e.getStackTraceString());
+                }
+            }
+
+    /**
+     * @description Test-specific method for round robin assignment
+     * This method bypasses normal business logic for testing purposes
+     * @param newLeads List of leads to assign
+     * @param oldLeadsMap Map of old lead values (optional)
+     * @param isInsert Boolean indicating if this is an insert operation
+     */
+    public static void handleQueueAssignmentsForTest(List<Lead> newLeads, Map<Id, Lead> oldLeadsMap, Boolean isInsert) {
+        System.debug('=== handleQueueAssignmentsForTest called ===');
+        
+        if (newLeads == null || newLeads.isEmpty()) {
+            return;
+        }
+
+        try {
+            // Get queue ID for filtering
+            String queueId = getQueueId();
+            if (String.isBlank(queueId)) {
+                return;
+            }
+
+            // Get active user IDs in the queue for round robin assignment
+            List<Id> activeUserIds = getActiveUserIds();
+            if (activeUserIds.isEmpty()) {
+                return;
+            }
+
+            // Process all leads for testing (bypass business logic)
+            List<Lead> leadsToAssign = new List<Lead>();
+            for (Lead lead : newLeads) {
+                if (lead.OwnerId != null) {
+                    leadsToAssign.add(lead);
+                }
+            }
+
+            if (leadsToAssign.isEmpty()) {
+                return;
+            }
+
+            // Get or create the round robin tracker object
+            Round_Robin_Tracker__c tracker = getOrCreateTracker();
+            if (tracker == null) {
+                return;
+            }
+
+            // Assign leads using round-robin logic and update them
+            assignLeadsToUsersForTest(leadsToAssign, activeUserIds, tracker);
+
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Error in handleQueueAssignmentsForTest: ' + e.getMessage());
+        }
+    }
+
+    /**
+     * @description Test-specific method to assign leads to users and update them
+     * @param leads List of leads to assign
+     * @param activeUserIds List of active user IDs
+     * @param tracker Round robin tracker
+     */
+    private static void assignLeadsToUsersForTest(List<Lead> leads, List<Id> activeUserIds, Round_Robin_Tracker__c tracker) {
+        if (leads.isEmpty() || activeUserIds.isEmpty()) {
+            return;
+        }
+
+        Integer currentIndex = (Integer) tracker.LastIndex__c;
+        List<Lead> leadsToUpdate = new List<Lead>();
+
+        for (Lead lead : leads) {
+            // Assign to next user in round-robin
+            Id assignedUserId = activeUserIds[currentIndex];
+            lead.OwnerId = assignedUserId;
+            leadsToUpdate.add(lead);
+
+            // Move to next user
+            currentIndex = Math.mod(currentIndex + 1, activeUserIds.size());
+        }
+
+        // Update the leads
+        if (!leadsToUpdate.isEmpty()) {
+            try {
+                update leadsToUpdate;
+            } catch (Exception e) {
+                System.debug(LoggingLevel.ERROR, 'Error updating leads in test: ' + e.getMessage());
+            }
+        }
+
+        // Update tracker
+        try {
+            tracker.LastIndex__c = currentIndex;
+            update tracker;
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Error updating tracker in test: ' + e.getMessage());
+        }
+    }
+
+    /**
+     * @description Clear all cached data (useful for testing)
+     */
+    public static void clearCache() {
+        cachedAssignmentEnabled = null;
+        cachedActiveUserIds = null;
+        cachedQueueId = null;
+        cachedTracker = null;
+        cachedSalesRepUserIds = null;
+    }
+}

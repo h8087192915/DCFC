@@ -1,0 +1,24 @@
+/**
+ * @description   Trigger on Contact object that masks newly added email addresses 
+ *                if masking is enabled via metadata. Ensures only new email values
+ *                are processed, and prevents accidental overwriting of existing data.
+ *                Uses handler pattern for better maintainability and bulk operations.
+ *
+ * @createdBy     Hitesh Nimje
+ * @date          2025-07-21
+ * @updatedBy     Hitesh Nimje
+ * @updateDate    2025-01-27
+ */
+
+trigger ContactTrigger on Contact (before insert, before update) {
+
+    if (Trigger.isBefore) {
+        if (Trigger.isInsert) {
+            // Handle email masking for new contacts
+            ContactEmailMaskingHandler.handleEmailMaskingOnInsert(Trigger.new);
+        } else if (Trigger.isUpdate) {
+            // Handle email masking for updated contacts
+            ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(Trigger.new, Trigger.oldMap);
+        }
+    }
+}

@@ -1,0 +1,491 @@
+/**
+ * @description Test class for ContactEmailMaskingHandler
+ * @author Hitesh Nimje
+ * @created date 2025-09-29
+ * @description Created this test class for comprehensive testing of ContactEmailMaskingHandler functionality including email masking operations, bulk operations, error handling, and edge cases
+ */
+@isTest
+private class ContactEmailMaskingHandlerTest {
+    
+    @TestSetup
+    static void setupTestData() {
+        // Create test account
+        Account testAccount = new Account(
+            Name = 'Test Account for Contact Email Masking',
+            BillingCity = 'Detroit',
+            BillingState = 'MI'
+        );
+        insert testAccount;
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsert() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id),
+            new Contact(FirstName = 'Jane', LastName = 'Smith', Email = 'jane@test.org', AccountId = [SELECT Id FROM Account LIMIT 1].Id),
+            new Contact(FirstName = 'Bob', LastName = 'Wilson', Email = 'bob@demo.net.invalid', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnInsert(contacts);
+        Test.stopTest();
+        
+        // Verify emails were masked
+        System.assert(contacts[0].Email.endsWith('.invalid'), 'First contact email should be masked');
+        System.assert(contacts[1].Email.endsWith('.invalid'), 'Second contact email should be masked');
+        System.assertEquals('bob@demo.net.invalid', contacts[2].Email, 'Already masked email should remain unchanged');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsertWithNullList() {
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnInsert(null);
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle null list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsertWithEmptyList() {
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnInsert(new List<Contact>());
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle empty list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsertWithException() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        ContactEmailMaskingHandler.testForceException = true;
+        
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        try {
+            ContactEmailMaskingHandler.handleEmailMaskingOnInsert(contacts);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdate() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create initial contacts without emails
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', AccountId = [SELECT Id FROM Account LIMIT 1].Id),
+            new Contact(FirstName = 'Jane', LastName = 'Smith', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        insert contacts;
+        
+        // Create old contacts map (without emails)
+        Map<Id, Contact> oldContactsMap = new Map<Id, Contact>();
+        for (Contact c : contacts) {
+            oldContactsMap.put(c.Id, new Contact(Id = c.Id, Email = null));
+        }
+        
+        // Update contacts with emails
+        contacts[0].Email = 'john@example.com';
+        contacts[1].Email = 'jane@test.org';
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(contacts, oldContactsMap);
+        Test.stopTest();
+        
+        // Verify emails were masked
+        System.assert(contacts[0].Email.endsWith('.invalid'), 'First contact email should be masked');
+        System.assert(contacts[1].Email.endsWith('.invalid'), 'Second contact email should be masked');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithNoEmailChange() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create contacts with emails
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        insert contacts;
+        
+        // Create old contacts map (with same emails)
+        Map<Id, Contact> oldContactsMap = new Map<Id, Contact>();
+        for (Contact c : contacts) {
+            oldContactsMap.put(c.Id, new Contact(Id = c.Id, Email = c.Email));
+        }
+        
+        // Update contact without changing email
+        contacts[0].FirstName = 'Johnny';
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(contacts, oldContactsMap);
+        Test.stopTest();
+        
+        // Email should not be masked since it didn't change
+        System.assertEquals('john@example.com', contacts[0].Email, 'Email should not be masked when unchanged');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithNullList() {
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(null, new Map<Id, Contact>());
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle null list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithEmptyList() {
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(new List<Contact>(), new Map<Id, Contact>());
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle empty list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithNullMap() {
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(contacts, null);
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle null map gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithException() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        ContactEmailMaskingHandler.testForceException = true;
+        
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        try {
+            insert contacts; // This will trigger the exception in the trigger
+            System.assert(false, 'Should have thrown an exception');
+        } catch (DmlException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testShouldMaskContactEmail() {
+        // Test with valid email
+        Contact contact1 = new Contact(Email = 'test@example.com');
+        System.assert(ContactEmailMaskingHandler.shouldMaskContactEmail(contact1), 'Valid email should be masked');
+        
+        // Test with already masked email
+        Contact contact2 = new Contact(Email = 'test@example.com.invalid');
+        System.assert(!ContactEmailMaskingHandler.shouldMaskContactEmail(contact2), 'Already masked email should not be masked');
+        
+        // Test with blank email
+        Contact contact3 = new Contact(Email = '');
+        System.assert(!ContactEmailMaskingHandler.shouldMaskContactEmail(contact3), 'Blank email should not be masked');
+        
+        // Test with null contact
+        System.assert(!ContactEmailMaskingHandler.shouldMaskContactEmail(null), 'Null contact should not be masked');
+        
+        // Test with invalid email format
+        Contact contact4 = new Contact(Email = 'invalid-email');
+        System.assert(ContactEmailMaskingHandler.shouldMaskContactEmail(contact4), 'Invalid email should still be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskContactEmailWithAlreadyMaskedEmail() {
+        Contact contact = new Contact(Email = 'test@example.com.invalid');
+        System.assert(!ContactEmailMaskingHandler.shouldMaskContactEmail(contact), 'Already masked email should not be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskContactEmailWithBlankEmail() {
+        Contact contact = new Contact(Email = '');
+        System.assert(!ContactEmailMaskingHandler.shouldMaskContactEmail(contact), 'Blank email should not be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskContactEmailWithInvalidEmail() {
+        Contact contact = new Contact(Email = 'invalid-email');
+        System.assert(ContactEmailMaskingHandler.shouldMaskContactEmail(contact), 'Invalid email should still be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskContactEmailWithNullContact() {
+        System.assert(!ContactEmailMaskingHandler.shouldMaskContactEmail(null), 'Null contact should not be masked');
+    }
+    
+    @isTest
+    static void testBulkEmailMaskingOnInsert() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Get account ID once to avoid SOQL limit
+        Id accountId = [SELECT Id FROM Account LIMIT 1].Id;
+        
+        List<Contact> contacts = new List<Contact>();
+        for (Integer i = 0; i < 200; i++) {
+            contacts.add(new Contact(
+                FirstName = 'Test' + i,
+                LastName = 'Contact' + i,
+                Email = 'test' + i + '@example.com',
+                AccountId = accountId
+            ));
+        }
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnInsert(contacts);
+        Test.stopTest();
+        
+        // Verify all emails were masked
+        for (Contact c : contacts) {
+            System.assert(c.Email.endsWith('.invalid'), 'All contact emails should be masked');
+        }
+    }
+    
+    @isTest
+    static void testBulkEmailMaskingOnUpdate() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Get account ID once to avoid SOQL limit
+        Id accountId = [SELECT Id FROM Account LIMIT 1].Id;
+        
+        // Create initial contacts without emails
+        List<Contact> contacts = new List<Contact>();
+        for (Integer i = 0; i < 200; i++) {
+            contacts.add(new Contact(
+                FirstName = 'Test' + i,
+                LastName = 'Contact' + i,
+                AccountId = accountId
+            ));
+        }
+        insert contacts;
+        
+        // Create old contacts map (without emails)
+        Map<Id, Contact> oldContactsMap = new Map<Id, Contact>();
+        for (Contact c : contacts) {
+            oldContactsMap.put(c.Id, new Contact(Id = c.Id, Email = null));
+        }
+        
+        // Update contacts with emails
+        for (Integer i = 0; i < contacts.size(); i++) {
+            contacts[i].Email = 'test' + i + '@example.com';
+        }
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(contacts, oldContactsMap);
+        Test.stopTest();
+        
+        // Verify all emails were masked
+        for (Contact c : contacts) {
+            System.assert(c.Email.endsWith('.invalid'), 'All contact emails should be masked');
+        }
+    }
+    
+    @isTest
+    static void testContactEmailMaskingIntegration() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id),
+            new Contact(FirstName = 'Jane', LastName = 'Smith', Email = 'jane@test.org', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        insert contacts;
+        Test.stopTest();
+        
+        // Verify emails were masked during insert
+        List<Contact> insertedContacts = [SELECT Email FROM Contact WHERE Id IN :contacts];
+        for (Contact c : insertedContacts) {
+            System.assert(c.Email.endsWith('.invalid'), 'Contact emails should be masked on insert');
+        }
+    }
+    
+    @isTest
+    static void testContactTriggerBulkOperations() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Get account ID once to avoid SOQL limit
+        Id accountId = [SELECT Id FROM Account LIMIT 1].Id;
+        
+        List<Contact> contacts = new List<Contact>();
+        for (Integer i = 0; i < 200; i++) {
+            contacts.add(new Contact(
+                FirstName = 'Bulk' + i,
+                LastName = 'Test' + i,
+                Email = 'bulk' + i + '@example.com',
+                AccountId = accountId
+            ));
+        }
+        
+        Test.startTest();
+        insert contacts;
+        Test.stopTest();
+        
+        // Verify all contacts were created and emails masked
+        List<Contact> insertedContacts = [SELECT Email FROM Contact WHERE FirstName LIKE 'Bulk%'];
+        System.assertEquals(200, insertedContacts.size(), 'All contacts should be created');
+        for (Contact c : insertedContacts) {
+            System.assert(c.Email.endsWith('.invalid'), 'All contact emails should be masked');
+        }
+    }
+    
+    @isTest
+    static void testContactTriggerExceptionHandling() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        ContactEmailMaskingHandler.testForceException = true;
+        
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'Exception', LastName = 'Test', Email = 'exception@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        try {
+            ContactEmailMaskingHandler.handleEmailMaskingOnInsert(contacts);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testContactTriggerOnInsert() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        Contact contact = new Contact(
+            FirstName = 'Trigger',
+            LastName = 'Test',
+            Email = 'trigger@example.com',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id
+        );
+        
+        Test.startTest();
+        insert contact;
+        Test.stopTest();
+        
+        // Verify email was masked
+        Contact insertedContact = [SELECT Email FROM Contact WHERE Id = :contact.Id];
+        System.assert(insertedContact.Email.endsWith('.invalid'), 'Contact email should be masked on insert');
+    }
+    
+    @isTest
+    static void testContactTriggerOnUpdate() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        Contact contact = new Contact(
+            FirstName = 'Update',
+            LastName = 'Test',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id
+        );
+        insert contact;
+        
+        Test.startTest();
+        contact.Email = 'update@example.com';
+        update contact;
+        Test.stopTest();
+        
+        // Verify email was masked
+        Contact updatedContact = [SELECT Email FROM Contact WHERE Id = :contact.Id];
+        System.assert(updatedContact.Email.endsWith('.invalid'), 'Contact email should be masked on update');
+    }
+    
+    @isTest
+    static void testContactTriggerOnUpdateWithNoEmailChange() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        Contact contact = new Contact(
+            FirstName = 'NoChange',
+            LastName = 'Test',
+            Email = 'nochange@example.com',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id
+        );
+        insert contact;
+        
+        Test.startTest();
+        contact.FirstName = 'Updated';
+        update contact;
+        Test.stopTest();
+        
+        // Verify email was not masked since it didn't change
+        Contact updatedContact = [SELECT Email FROM Contact WHERE Id = :contact.Id];
+        System.assertEquals('nochange@example.com', updatedContact.Email, 'Email should not be masked when unchanged');
+    }
+    
+    @isTest
+    static void testErrorHandling() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        ContactEmailMaskingHandler.testForceException = true;
+        
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'Error', LastName = 'Test', Email = 'error@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        
+        Test.startTest();
+        try {
+            ContactEmailMaskingHandler.handleEmailMaskingOnInsert(contacts);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testFilterContactsForMaskingEdgeCases() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create contacts
+        List<Contact> contacts = new List<Contact>{
+            new Contact(FirstName = 'Edge1', LastName = 'Test', Email = 'edge1@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id),
+            new Contact(FirstName = 'Edge2', LastName = 'Test', Email = 'edge2@example.com', AccountId = [SELECT Id FROM Account LIMIT 1].Id)
+        };
+        insert contacts;
+        
+        // Create old contacts map with different scenarios
+        Map<Id, Contact> oldContactsMap = new Map<Id, Contact>();
+        oldContactsMap.put(contacts[0].Id, new Contact(Id = contacts[0].Id, Email = null)); // Was blank, now filled
+        oldContactsMap.put(contacts[1].Id, new Contact(Id = contacts[1].Id, Email = 'old@example.com')); // Was filled, still filled
+        
+        Test.startTest();
+        ContactEmailMaskingHandler.handleEmailMaskingOnUpdate(contacts, oldContactsMap);
+        Test.stopTest();
+        
+        // Only first contact should be masked (email was added)
+        System.assert(contacts[0].Email.endsWith('.invalid'), 'First contact email should be masked');
+        System.assertEquals('edge2@example.com', contacts[1].Email, 'Second contact email should not be masked');
+    }
+
+}

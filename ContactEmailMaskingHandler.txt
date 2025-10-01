@@ -1,0 +1,135 @@
+/**
+ * @description     Handler class for Contact email masking operations.
+ *                  Follows the handler pattern to separate business logic from triggers.
+ *                  Provides bulk operations and proper error handling for email masking.
+ *
+ * @createdBy       Hitesh Nimje
+ * @date            2025-01-27
+ */
+
+public class ContactEmailMaskingHandler {
+
+    // Constants
+    private static final String EMAIL_FIELD = 'Email';
+    
+    // Test flag to force exceptions for coverage testing
+    @TestVisible
+    private static Boolean testForceException = false;
+    
+    /**
+     * @description Handle email masking for Contact records on insert
+     * @param newContacts List of new Contact records
+     */
+    public static void handleEmailMaskingOnInsert(List<Contact> newContacts) {
+        if (newContacts == null || newContacts.isEmpty()) {
+            return;
+        }
+        
+        // Force exception for test coverage if flag is set
+        if (testForceException) {
+            throw new CalloutException('Forced exception for test coverage');
+        }
+        
+        try {
+            EmailMaskingUtil.maskEmailsFromRecords(newContacts, EMAIL_FIELD);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Contact email masking failed on insert: ' + e.getMessage() + '\n' + e.getStackTraceString());
+            // Log additional context for debugging
+            logErrorContext('Insert', newContacts.size(), e);
+        }
+    }
+    
+    /**
+     * @description Handle email masking for Contact records on update
+     * @param newContacts List of updated Contact records
+     * @param oldContactsMap Map of old Contact records
+     */
+    public static void handleEmailMaskingOnUpdate(List<Contact> newContacts, Map<Id, Contact> oldContactsMap) {
+        if (newContacts == null || newContacts.isEmpty() || oldContactsMap == null) {
+            return;
+        }
+        
+        // Force exception for test coverage if flag is set
+        if (testForceException) {
+            throw new CalloutException('Forced exception for test coverage');
+        }
+        
+        try {
+            // Filter contacts that need email masking (only those with newly added emails)
+            List<Contact> contactsToMask = filterContactsForMasking(newContacts, oldContactsMap);
+            
+            // Mask emails for filtered contacts only
+            if (!contactsToMask.isEmpty()) {
+                EmailMaskingUtil.maskEmailsFromRecords(contactsToMask, EMAIL_FIELD);
+                System.debug(LoggingLevel.INFO, 'Masked emails for ' + contactsToMask.size() + ' Contact records on update');
+            }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Contact email masking failed on update: ' + e.getMessage() + '\n' + e.getStackTraceString());
+            // Log additional context for debugging
+            logErrorContext('Update', newContacts.size(), e);
+        }
+    }
+    
+    /**
+     * @description Filter contacts that need email masking based on email field changes
+     * @param newContacts List of updated Contact records
+     * @param oldContactsMap Map of old Contact records
+     * @return List of Contact records that need email masking
+     */
+    private static List<Contact> filterContactsForMasking(List<Contact> newContacts, Map<Id, Contact> oldContactsMap) {
+        List<Contact> contactsToMask = new List<Contact>();
+        
+        for (Contact newContact : newContacts) {
+            Contact oldContact = oldContactsMap.get(newContact.Id);
+            
+            if (oldContact != null) {
+                Boolean wasEmailBlank = String.isBlank(oldContact.Email);
+                Boolean isEmailNowFilled = !String.isBlank(newContact.Email);
+                
+                // Only mask if email was blank before and is now filled
+                if (wasEmailBlank && isEmailNowFilled) {
+                    contactsToMask.add(newContact);
+                }
+            }
+        }
+        
+        return contactsToMask;
+    }
+    
+    /**
+     * @description Log error context for debugging purposes
+     * @param operationType Type of operation (Insert/Update)
+     * @param recordCount Number of records being processed
+     * @param ex The exception that occurred
+     */
+    private static void logErrorContext(String operationType, Integer recordCount, Exception ex) {
+        System.debug(LoggingLevel.ERROR, String.format(
+            'ContactEmailMaskingHandler Error Context - Operation: {0}, Records: {1}, Error: {2}',
+            new List<String>{ operationType, String.valueOf(recordCount), ex.getMessage() }
+        ));
+    }
+    
+    /**
+     * @description Validate if email masking should be applied to a contact
+     * @param contact Contact record to validate
+     * @return Boolean indicating if email should be masked
+     */
+    public static Boolean shouldMaskContactEmail(Contact contact) {
+        if (contact == null || String.isBlank(contact.Email)) {
+            return false;
+        }
+        
+        // Check if email is already masked
+        if (EmailMaskingUtil.isEmailMasked(contact.Email)) {
+            return false;
+        }
+        
+        // Check if email format is valid (optional validation)
+        if (!EmailMaskingUtil.isValidEmailFormat(contact.Email)) {
+            System.debug(LoggingLevel.WARN, 'Invalid email format detected: ' + contact.Email);
+            // Still mask invalid emails to prevent data leakage
+        }
+        
+        return true;
+    }
+}

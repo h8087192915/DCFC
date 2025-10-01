@@ -1,0 +1,475 @@
+/**
+ * @description Test class for LeadEmailMaskingHandler
+ * @author Hitesh Nimje
+ * @created date 2025-09-29
+ * @description Created this test class for comprehensive testing of LeadEmailMaskingHandler functionality including email masking operations, bulk operations, error handling, and edge cases
+ */
+@isTest
+private class LeadEmailMaskingHandlerTest {
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsert() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', Company = 'Test Company'),
+            new Lead(FirstName = 'Jane', LastName = 'Smith', Email = 'jane@test.org', Company = 'Test Company'),
+            new Lead(FirstName = 'Bob', LastName = 'Wilson', Email = 'bob@demo.net.invalid', Company = 'Test Company')
+        };
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnInsert(leads);
+        Test.stopTest();
+        
+        // Verify emails were masked
+        System.assert(leads[0].Email.endsWith('.invalid'), 'First lead email should be masked');
+        System.assert(leads[1].Email.endsWith('.invalid'), 'Second lead email should be masked');
+        System.assertEquals('bob@demo.net.invalid', leads[2].Email, 'Already masked email should remain unchanged');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsertWithNullList() {
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnInsert(null);
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle null list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsertWithEmptyList() {
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnInsert(new List<Lead>());
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle empty list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnInsertWithException() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        LeadEmailMaskingHandler.testForceException = true;
+        
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', Company = 'Test Company')
+        };
+        
+        Test.startTest();
+        try {
+            LeadEmailMaskingHandler.handleEmailMaskingOnInsert(leads);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdate() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create initial leads without emails
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Company = 'Test Company'),
+            new Lead(FirstName = 'Jane', LastName = 'Smith', Company = 'Test Company')
+        };
+        insert leads;
+        
+        // Create old leads map (without emails)
+        Map<Id, Lead> oldLeadsMap = new Map<Id, Lead>();
+        for (Lead l : leads) {
+            oldLeadsMap.put(l.Id, new Lead(Id = l.Id, Email = null));
+        }
+        
+        // Update leads with emails
+        leads[0].Email = 'john@example.com';
+        leads[1].Email = 'jane@test.org';
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(leads, oldLeadsMap);
+        Test.stopTest();
+        
+        // Verify emails were masked
+        System.assert(leads[0].Email.endsWith('.invalid'), 'First lead email should be masked');
+        System.assert(leads[1].Email.endsWith('.invalid'), 'Second lead email should be masked');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithNoEmailChange() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create leads with emails
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', Company = 'Test Company')
+        };
+        insert leads;
+        
+        // Create old leads map (with same emails)
+        Map<Id, Lead> oldLeadsMap = new Map<Id, Lead>();
+        for (Lead l : leads) {
+            oldLeadsMap.put(l.Id, new Lead(Id = l.Id, Email = l.Email));
+        }
+        
+        // Update lead without changing email
+        leads[0].FirstName = 'Johnny';
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(leads, oldLeadsMap);
+        Test.stopTest();
+        
+        // Email should not be masked since it didn't change
+        System.assertEquals('john@example.com', leads[0].Email, 'Email should not be masked when unchanged');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithNullList() {
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(null, new Map<Id, Lead>());
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle null list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithEmptyList() {
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(new List<Lead>(), new Map<Id, Lead>());
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle empty list gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithNullMap() {
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', Company = 'Test Company')
+        };
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(leads, null);
+        Test.stopTest();
+        
+        // Should complete without errors
+        System.assert(true, 'Should handle null map gracefully');
+    }
+    
+    @isTest
+    static void testHandleEmailMaskingOnUpdateWithException() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        LeadEmailMaskingHandler.testForceException = true;
+        
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', Company = 'Test Company')
+        };
+        insert leads;
+        
+        Map<Id, Lead> oldLeadsMap = new Map<Id, Lead>();
+        oldLeadsMap.put(leads[0].Id, new Lead(Id = leads[0].Id, Email = null));
+        
+        Test.startTest();
+        try {
+            LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(leads, oldLeadsMap);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testShouldMaskLeadEmail() {
+        // Test with valid email
+        Lead lead1 = new Lead(Email = 'test@example.com', Company = 'Test Company');
+        System.assert(LeadEmailMaskingHandler.shouldMaskLeadEmail(lead1), 'Valid email should be masked');
+        
+        // Test with already masked email
+        Lead lead2 = new Lead(Email = 'test@example.com.invalid', Company = 'Test Company');
+        System.assert(!LeadEmailMaskingHandler.shouldMaskLeadEmail(lead2), 'Already masked email should not be masked');
+        
+        // Test with blank email
+        Lead lead3 = new Lead(Email = '', Company = 'Test Company');
+        System.assert(!LeadEmailMaskingHandler.shouldMaskLeadEmail(lead3), 'Blank email should not be masked');
+        
+        // Test with null lead
+        System.assert(!LeadEmailMaskingHandler.shouldMaskLeadEmail(null), 'Null lead should not be masked');
+        
+        // Test with invalid email format
+        Lead lead4 = new Lead(Email = 'invalid-email', Company = 'Test Company');
+        System.assert(LeadEmailMaskingHandler.shouldMaskLeadEmail(lead4), 'Invalid email should still be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskLeadEmailWithAlreadyMaskedEmail() {
+        Lead lead = new Lead(Email = 'test@example.com.invalid', Company = 'Test Company');
+        System.assert(!LeadEmailMaskingHandler.shouldMaskLeadEmail(lead), 'Already masked email should not be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskLeadEmailWithBlankEmail() {
+        Lead lead = new Lead(Email = '', Company = 'Test Company');
+        System.assert(!LeadEmailMaskingHandler.shouldMaskLeadEmail(lead), 'Blank email should not be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskLeadEmailWithInvalidEmail() {
+        Lead lead = new Lead(Email = 'invalid-email', Company = 'Test Company');
+        System.assert(LeadEmailMaskingHandler.shouldMaskLeadEmail(lead), 'Invalid email should still be masked');
+    }
+    
+    @isTest
+    static void testShouldMaskLeadEmailWithNullLead() {
+        System.assert(!LeadEmailMaskingHandler.shouldMaskLeadEmail(null), 'Null lead should not be masked');
+    }
+    
+    @isTest
+    static void testBulkEmailMaskingOnInsert() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        List<Lead> leads = new List<Lead>();
+        for (Integer i = 0; i < 200; i++) {
+            leads.add(new Lead(
+                FirstName = 'Test' + i,
+                LastName = 'Lead' + i,
+                Email = 'test' + i + '@example.com',
+                Company = 'Test Company ' + i
+            ));
+        }
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnInsert(leads);
+        Test.stopTest();
+        
+        // Verify all emails were masked
+        for (Lead l : leads) {
+            System.assert(l.Email.endsWith('.invalid'), 'All lead emails should be masked');
+        }
+    }
+    
+    @isTest
+    static void testBulkEmailMaskingOnUpdate() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create initial leads without emails
+        List<Lead> leads = new List<Lead>();
+        for (Integer i = 0; i < 200; i++) {
+            leads.add(new Lead(
+                FirstName = 'Test' + i,
+                LastName = 'Lead' + i,
+                Company = 'Test Company ' + i
+            ));
+        }
+        insert leads;
+        
+        // Create old leads map (without emails)
+        Map<Id, Lead> oldLeadsMap = new Map<Id, Lead>();
+        for (Lead l : leads) {
+            oldLeadsMap.put(l.Id, new Lead(Id = l.Id, Email = null));
+        }
+        
+        // Update leads with emails
+        for (Integer i = 0; i < leads.size(); i++) {
+            leads[i].Email = 'test' + i + '@example.com';
+        }
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(leads, oldLeadsMap);
+        Test.stopTest();
+        
+        // Verify all emails were masked
+        for (Lead l : leads) {
+            System.assert(l.Email.endsWith('.invalid'), 'All lead emails should be masked');
+        }
+    }
+    
+    @isTest
+    static void testLeadEmailMaskingIntegration() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'John', LastName = 'Doe', Email = 'john@example.com', Company = 'Test Company'),
+            new Lead(FirstName = 'Jane', LastName = 'Smith', Email = 'jane@test.org', Company = 'Test Company')
+        };
+        
+        Test.startTest();
+        insert leads;
+        Test.stopTest();
+        
+        // Verify emails were masked during insert
+        List<Lead> insertedLeads = [SELECT Email FROM Lead WHERE Id IN :leads];
+        for (Lead l : insertedLeads) {
+            System.assert(l.Email.endsWith('.invalid'), 'Lead emails should be masked on insert');
+        }
+    }
+    
+    @isTest
+    static void testLeadTriggerBulkOperations() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        List<Lead> leads = new List<Lead>();
+        for (Integer i = 0; i < 200; i++) {
+            leads.add(new Lead(
+                FirstName = 'Bulk' + i,
+                LastName = 'Test' + i,
+                Email = 'bulk' + i + '@example.com',
+                Company = 'Bulk Company ' + i
+            ));
+        }
+        
+        Test.startTest();
+        insert leads;
+        Test.stopTest();
+        
+        // Verify all leads were created and emails masked
+        List<Lead> insertedLeads = [SELECT Email FROM Lead WHERE FirstName LIKE 'Bulk%'];
+        System.assertEquals(200, insertedLeads.size(), 'All leads should be created');
+        for (Lead l : insertedLeads) {
+            System.assert(l.Email.endsWith('.invalid'), 'All lead emails should be masked');
+        }
+    }
+    
+    @isTest
+    static void testLeadTriggerExceptionHandling() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        LeadEmailMaskingHandler.testForceException = true;
+        
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'Exception', LastName = 'Test', Email = 'exception@example.com', Company = 'Test Company')
+        };
+        
+        Test.startTest();
+        try {
+            LeadEmailMaskingHandler.handleEmailMaskingOnInsert(leads);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testLeadTriggerOnInsert() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        Lead lead = new Lead(
+            FirstName = 'Trigger',
+            LastName = 'Test',
+            Email = 'trigger@example.com',
+            Company = 'Test Company'
+        );
+        
+        Test.startTest();
+        insert lead;
+        Test.stopTest();
+        
+        // Verify email was masked
+        Lead insertedLead = [SELECT Email FROM Lead WHERE Id = :lead.Id];
+        System.assert(insertedLead.Email.endsWith('.invalid'), 'Lead email should be masked on insert');
+    }
+    
+    @isTest
+    static void testLeadTriggerOnUpdate() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        Lead lead = new Lead(
+            FirstName = 'Update',
+            LastName = 'Test',
+            Company = 'Test Company'
+        );
+        insert lead;
+        
+        Test.startTest();
+        lead.Email = 'update@example.com';
+        update lead;
+        Test.stopTest();
+        
+        // Verify email was masked
+        Lead updatedLead = [SELECT Email FROM Lead WHERE Id = :lead.Id];
+        System.assert(updatedLead.Email.endsWith('.invalid'), 'Lead email should be masked on update');
+    }
+    
+    @isTest
+    static void testLeadTriggerOnUpdateWithNoEmailChange() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        Lead lead = new Lead(
+            FirstName = 'NoChange',
+            LastName = 'Test',
+            Email = 'nochange@example.com',
+            Company = 'Test Company'
+        );
+        insert lead;
+        
+        Test.startTest();
+        lead.FirstName = 'Updated';
+        update lead;
+        Test.stopTest();
+        
+        // Verify email was not masked since it didn't change
+        Lead updatedLead = [SELECT Email FROM Lead WHERE Id = :lead.Id];
+        System.assertEquals('nochange@example.com', updatedLead.Email, 'Email should not be masked when unchanged');
+    }
+    
+    @isTest
+    static void testErrorHandling() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        LeadEmailMaskingHandler.testForceException = true;
+        
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'Error', LastName = 'Test', Email = 'error@example.com', Company = 'Test Company')
+        };
+        
+        Test.startTest();
+        try {
+            LeadEmailMaskingHandler.handleEmailMaskingOnInsert(leads);
+            System.assert(false, 'Should have thrown an exception');
+        } catch (CalloutException e) {
+            System.assert(e.getMessage().contains('Forced exception for test coverage'), 'Should throw forced exception');
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testFilterLeadsForMaskingEdgeCases() {
+        EmailMaskingUtil.clearCache();
+        EmailMaskingUtil.testMaskFlag = true;
+        
+        // Create leads
+        List<Lead> leads = new List<Lead>{
+            new Lead(FirstName = 'Edge1', LastName = 'Test', Email = 'edge1@example.com', Company = 'Test Company'),
+            new Lead(FirstName = 'Edge2', LastName = 'Test', Email = 'edge2@example.com', Company = 'Test Company')
+        };
+        insert leads;
+        
+        // Create old leads map with different scenarios
+        Map<Id, Lead> oldLeadsMap = new Map<Id, Lead>();
+        oldLeadsMap.put(leads[0].Id, new Lead(Id = leads[0].Id, Email = null)); // Was blank, now filled
+        oldLeadsMap.put(leads[1].Id, new Lead(Id = leads[1].Id, Email = 'old@example.com')); // Was filled, still filled
+        
+        Test.startTest();
+        LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(leads, oldLeadsMap);
+        Test.stopTest();
+        
+        // Only first lead should be masked (email was added)
+        System.assert(leads[0].Email.endsWith('.invalid'), 'First lead email should be masked');
+        System.assertEquals('edge2@example.com', leads[1].Email, 'Second lead email should not be masked');
+    }
+
+}

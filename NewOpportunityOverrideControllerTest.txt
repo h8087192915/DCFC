@@ -1,0 +1,366 @@
+/**
+ * @description Test class for NewOpportunityOverrideController
+ * @author Hitesh Nimje
+ * @created date 2025-09-29
+ * @description Created this test class for comprehensive testing of NewOpportunityOverrideController functionality including save operations, validation, error handling, and various opportunity scenarios
+ */
+@isTest
+private class NewOpportunityOverrideControllerTest {
+    
+    @TestSetup
+    static void setupTestData() {
+        // Create test account
+        Account testAccount = new Account(
+            Name = 'Test Account for Opportunity Override Controller',
+            BillingCity = 'Detroit',
+            BillingState = 'MI'
+        );
+        insert testAccount;
+    }
+    
+    @isTest
+    static void testConstructor() {
+        // Create test opportunity
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override Constructor',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 10000
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        
+        Test.startTest();
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        Test.stopTest();
+        
+        // Verify controller was created successfully
+        System.assertNotEquals(null, controller, 'Controller should be created successfully');
+    }
+    
+    @isTest
+    static void testSaveSuccess() {
+        // Create test opportunity
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override Save',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 10000
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify opportunity was saved and redirect occurred
+        System.assertNotEquals(null, result, 'Save should return a PageReference');
+        System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity');
+        
+        // Verify opportunity was actually created
+        List<Opportunity> createdOpps = [SELECT Id, Name FROM Opportunity WHERE Name = 'Test Opportunity Override Save'];
+        System.assertEquals(1, createdOpps.size(), 'Opportunity should be created');
+    }
+    
+    @isTest
+    static void testSaveWithValidationError() {
+        // Create test opportunity with missing required fields to force validation error
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override Validation Error'
+            // Missing required fields: AccountId, StageName, CloseDate
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify save failed and returned null (stayed on page)
+        System.assertEquals(null, result, 'Save should return null when validation fails');
+        
+        // Verify opportunity was not created
+        List<Opportunity> createdOpps = [SELECT Id FROM Opportunity WHERE Name = 'Test Opportunity Override Validation Error'];
+        System.assertEquals(0, createdOpps.size(), 'Opportunity should not be created when validation fails');
+    }
+    
+    @isTest
+    static void testSaveWithDmlException() {
+        // Create test opportunity with invalid data to force DML exception
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override DML Error',
+            AccountId = '001000000000000', // Invalid Account ID
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 10000
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify save failed and returned null (stayed on page)
+        System.assertEquals(null, result, 'Save should return null when DML exception occurs');
+        
+        // Verify opportunity was not created
+        List<Opportunity> createdOpps = [SELECT Id FROM Opportunity WHERE Name = 'Test Opportunity Override DML Error'];
+        System.assertEquals(0, createdOpps.size(), 'Opportunity should not be created when DML exception occurs');
+    }
+    
+    @isTest
+    static void testCancel() {
+        // Create test opportunity
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override Cancel',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 10000
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.cancel();
+        Test.stopTest();
+        
+        // Verify cancel redirects to opportunity list view
+        System.assertNotEquals(null, result, 'Cancel should return a PageReference');
+        System.assert(result.getUrl().contains(Schema.SObjectType.Opportunity.getKeyPrefix()), 
+                     'Should redirect to opportunity list view');
+        System.assert(result.getUrl().contains('/o'), 'Should redirect to opportunity list view');
+        
+        // Verify opportunity was not created
+        List<Opportunity> createdOpps = [SELECT Id FROM Opportunity WHERE Name = 'Test Opportunity Override Cancel'];
+        System.assertEquals(0, createdOpps.size(), 'Opportunity should not be created when cancelled');
+    }
+    
+    @isTest
+    static void testSaveWithEmptyOpportunity() {
+        // Create empty opportunity
+        Opportunity testOpp = new Opportunity();
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify save failed due to missing required fields
+        System.assertEquals(null, result, 'Save should return null when required fields are missing');
+    }
+    
+    @isTest
+    static void testSaveWithLargeAmount() {
+        // Test with very large amount to ensure no governor limit issues
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override Large Amount',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 999999999.99
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify opportunity was saved successfully
+        System.assertNotEquals(null, result, 'Save should return a PageReference');
+        System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity');
+        
+        // Verify opportunity was created with correct amount
+        List<Opportunity> createdOpps = [SELECT Id, Amount FROM Opportunity WHERE Name = 'Test Opportunity Override Large Amount'];
+        System.assertEquals(1, createdOpps.size(), 'Opportunity should be created');
+        System.assertEquals(999999999.99, createdOpps[0].Amount, 'Amount should be preserved');
+    }
+    
+    @isTest
+    static void testSaveWithDifferentStages() {
+        // Test with different opportunity stages
+        List<String> stages = new List<String>{'Prospecting', 'Qualification', 'Needs Analysis', 'Proposal/Price Quote', 'Negotiation/Review'};
+        
+        Test.startTest();
+        for (String stage : stages) {
+            Opportunity testOpp = new Opportunity(
+                Name = 'Test Opportunity Override ' + stage,
+                AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+                StageName = stage,
+                CloseDate = Date.today().addDays(30),
+                Amount = 10000
+            );
+            
+            // Create standard controller
+            ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+            NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+            
+            PageReference result = controller.save();
+            
+            // Verify opportunity was saved successfully
+            System.assertNotEquals(null, result, 'Save should return a PageReference for stage: ' + stage);
+            System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity for stage: ' + stage);
+            
+            // Verify opportunity was created
+            List<Opportunity> createdOpps = [SELECT Id, StageName FROM Opportunity WHERE Name = :('Test Opportunity Override ' + stage)];
+            System.assertEquals(1, createdOpps.size(), 'Opportunity should be created for stage: ' + stage);
+            System.assertEquals(stage, createdOpps[0].StageName, 'Stage should match for: ' + stage);
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testSaveWithDifferentCloseDates() {
+        // Test with different close dates
+        List<Date> closeDates = new List<Date>{
+            Date.today(),
+            Date.today().addDays(7),
+            Date.today().addDays(30),
+            Date.today().addDays(90),
+            Date.today().addDays(365)
+        };
+        
+        Test.startTest();
+        for (Date closeDate : closeDates) {
+            Opportunity testOpp = new Opportunity(
+                Name = 'Test Opportunity Override Close Date ' + closeDate,
+                AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+                StageName = 'Prospecting',
+                CloseDate = closeDate,
+                Amount = 10000
+            );
+            
+            // Create standard controller
+            ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+            NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+            
+            PageReference result = controller.save();
+            
+            // Verify opportunity was saved successfully
+            System.assertNotEquals(null, result, 'Save should return a PageReference for close date: ' + closeDate);
+            System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity for close date: ' + closeDate);
+            
+            // Verify opportunity was created
+            String opportunityName = 'Test Opportunity Override Close Date ' + closeDate;
+            List<Opportunity> createdOpps = [SELECT Id, CloseDate FROM Opportunity WHERE Name = :opportunityName];
+            System.assert(createdOpps.size() >= 1, 'Opportunity should be created for close date: ' + closeDate);
+            if (!createdOpps.isEmpty()) {
+                System.assertEquals(closeDate, createdOpps[0].CloseDate, 'Close date should match for: ' + closeDate);
+            }
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testSaveWithDifferentAmounts() {
+        // Test with different amounts
+        List<Decimal> amounts = new List<Decimal>{0, 100, 1000, 10000, 100000, 1000000};
+        
+        Test.startTest();
+        for (Decimal amount : amounts) {
+            Opportunity testOpp = new Opportunity(
+                Name = 'Test Opportunity Override Amount ' + amount,
+                AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+                StageName = 'Prospecting',
+                CloseDate = Date.today().addDays(30),
+                Amount = amount
+            );
+            
+            // Create standard controller
+            ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+            NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+            
+            PageReference result = controller.save();
+            
+            // Verify opportunity was saved successfully
+            System.assertNotEquals(null, result, 'Save should return a PageReference for amount: ' + amount);
+            System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity for amount: ' + amount);
+            
+            // Verify opportunity was created
+            List<Opportunity> createdOpps = [SELECT Id, Amount FROM Opportunity WHERE Name = :('Test Opportunity Override Amount ' + String.valueOf(amount))];
+            System.assertEquals(1, createdOpps.size(), 'Opportunity should be created for amount: ' + amount);
+            System.assertEquals(amount, createdOpps[0].Amount, 'Amount should match for: ' + amount);
+        }
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testSaveWithDescription() {
+        // Test with description field
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override with Description',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 10000,
+            Description = 'This is a test opportunity with a description field populated for testing purposes.'
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify opportunity was saved successfully
+        System.assertNotEquals(null, result, 'Save should return a PageReference');
+        System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity');
+        
+        // Verify opportunity was created with description
+        List<Opportunity> createdOpps = [SELECT Id, Description FROM Opportunity WHERE Name = 'Test Opportunity Override with Description'];
+        System.assertEquals(1, createdOpps.size(), 'Opportunity should be created');
+        System.assertEquals('This is a test opportunity with a description field populated for testing purposes.', 
+                           createdOpps[0].Description, 'Description should be preserved');
+    }
+    
+    @isTest
+    static void testSaveWithProbability() {
+        // Test with probability field
+        Opportunity testOpp = new Opportunity(
+            Name = 'Test Opportunity Override with Probability',
+            AccountId = [SELECT Id FROM Account LIMIT 1].Id,
+            StageName = 'Prospecting',
+            CloseDate = Date.today().addDays(30),
+            Amount = 10000,
+            Probability = 25
+        );
+        
+        // Create standard controller
+        ApexPages.StandardController stdController = new ApexPages.StandardController(testOpp);
+        NewOpportunityOverrideController controller = new NewOpportunityOverrideController(stdController);
+        
+        Test.startTest();
+        PageReference result = controller.save();
+        Test.stopTest();
+        
+        // Verify opportunity was saved successfully
+        System.assertNotEquals(null, result, 'Save should return a PageReference');
+        System.assert(result.getUrl().contains(testOpp.Id), 'Should redirect to the created opportunity');
+        
+        // Verify opportunity was created with probability
+        List<Opportunity> createdOpps = [SELECT Id, Probability FROM Opportunity WHERE Name = 'Test Opportunity Override with Probability'];
+        System.assertEquals(1, createdOpps.size(), 'Opportunity should be created');
+        System.assertEquals(25, createdOpps[0].Probability, 'Probability should be preserved');
+    }
+}

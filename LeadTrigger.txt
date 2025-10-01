@@ -1,0 +1,51 @@
+/**
+ * @description   Unified trigger for Lead object that:
+ *                1. Assigns leads to active users using round-robin logic when assigned to Sales Rep Queue.
+ *                2. Masks newly added email addresses if masking is enabled (before insert/update).
+ *                3. Skips round-robin for leads created by Sales Reps with "dcfc staff" role.
+ *                Follows best practices by keeping one trigger per object and delegating
+ *                logic to handler classes for maintainability.
+ *                Uses handler pattern for better maintainability and bulk operations.
+ *
+ * @createdBy     Hitesh Nimje
+ * @date          2025-07-15
+ * @updatedBy     Hitesh Nimje
+ * @updateDate    2025-09-25
+ */
+
+trigger LeadTrigger on Lead (before insert, before update, after insert, after update) {
+
+    if (Trigger.isBefore && Trigger.isInsert) {
+        try {
+            // Handle email masking for new leads
+            LeadEmailMaskingHandler.handleEmailMaskingOnInsert(Trigger.new);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, '@@ LeadEmailMaskingHandler failed: ' + e.getMessage());
+        }
+    }
+
+    if (Trigger.isBefore && Trigger.isUpdate) {
+        try {
+            // Handle email masking for updated leads
+            LeadEmailMaskingHandler.handleEmailMaskingOnUpdate(Trigger.new, Trigger.oldMap);
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, '@@ LeadEmailMaskingHandler failed: ' + e.getMessage());
+        }
+    }
+
+    // Handle round robin assignment for all leads except those created by Sales Reps with "dcfc staff" role
+    // This runs AFTER lead assignment rules have executed
+    if (Trigger.isAfter) {
+        try {
+                    if (Trigger.isInsert) {
+                        LeadRoundRobinHandler.handleQueueAssignments(Trigger.new, null, true);
+                    } else if (Trigger.isUpdate) {
+                       // Let's only run this logic on insert, not updates. This will address the issue
+                        // we are seeing with the Web-to-Lead updates causing multiple reassignments.
+                        // LeadRoundRobinHandler.handleQueueAssignments(Trigger.new, Trigger.oldMap, false);
+                    }
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'Error in LeadTrigger: ' + e.getMessage());
+        }
+    }
+}
