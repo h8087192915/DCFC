@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join DetCity FC | Community Membership</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.8)), 
+                        url('https://www.detcityfc.com/wp-content/uploads/sites/56/2023/11/cropped-DCFC-Crest-2021-no-star.png?resize=2048,1635');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+
+        .production-badge {
+            text-align: center;
+            background: #e74c3c;
+            color: white;
+            padding: 8px 0;
+            font-weight: bold;
+            font-size: 14px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .container {
+            max-width: 650px;
+            margin: 50px auto;
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 16px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+            overflow: hidden;
+            border: 1px solid rgba(0, 51, 102, 0.15);
+        }
+
+        header {
+            background: linear-gradient(135deg, #003366 0%, #002244 100%);
+            padding: 30px 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+        }
+
+        header h1 {
+            color: #fff;
+            font-size: 2.8rem;
+            margin-bottom: 12px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            position: relative;
+            letter-spacing: -0.5px;
+        }
+
+        header p {
+            color: #e6e6e6;
+            font-size: 1.3rem;
+            max-width: 85%;
+            margin: 0 auto;
+            line-height: 1.6;
+            position: relative;
+        }
+
+        .form-content {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #003366;
+            font-size: 1.1rem;
+        }
+
+        .required::after {
+            content: " *";
+            color: #e74c3c;
+        }
+
+        input[type="text"], 
+        input[type="email"],
+        select {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 17px;
+            transition: all 0.4s ease;
+            background: #fafafa;
+        }
+
+        input[type="text"]:focus, 
+        input[type="email"]:focus,
+        select:focus {
+            border-color: #003366;
+            box-shadow: 0 0 0 3px rgba(0, 51, 102, 0.18);
+            outline: none;
+            background: #fff;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        input[type="submit"] {
+            background: linear-gradient(135deg, #003366 0%, #002244 100%);
+            color: white;
+            border: none;
+            padding: 16px 28px;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.4s;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+        }
+
+        input[type="submit"]:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 51, 102, 0.3);
+            background: linear-gradient(135deg, #002244 0%, #001a33 100%);
+        }
+
+        input[type="submit"]:active {
+            transform: translateY(0);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 25px 40px;
+            color: #666;
+            font-size: 0.95rem;
+            background: #f8f9fa;
+            border-top: 1px solid #eee;
+        }
+
+        .form-note {
+            text-align: center;
+            margin-top: 20px;
+            color: #555;
+            font-size: 0.9rem;
+            padding: 12px;
+            background: #f1f7ff;
+            border-radius: 8px;
+            border-left: 3px solid #003366;
+        }
+
+        @media (max-width: 768px) {
+            .form-content {
+                padding: 30px 25px;
+            }
+            
+            header h1 {
+                font-size: 2.2rem;
+            }
+            
+            header p {
+                font-size: 1.1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                margin: 15px;
+            }
+            
+            header {
+                padding: 25px 20px;
+            }
+            
+            header h1 {
+                font-size: 1.9rem;
+            }
+            
+            .form-content {
+                padding: 25px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="production-badge">
+            Production Web to Lead Form
+        </div>
+        
+        <header>
+            <h1>Join the Detroit Soccer Movement</h1>
+            <p>Be part of something bigger than the game. Help us grow soccer in the heart of Detroit.</p>
+        </header>
+        
+        <div class="form-content">
+            <form action="https://webto.salesforce.com/servlet/servlet.WebToLead?encoding=UTF-8&orgId=00DfJ00000Qk1K4" method="POST">
+                <input type="hidden" name="oid" value="00DfJ00000Qk1K4">
+                <input type="hidden" name="retURL" value="https://www.detcityfc.com/">
+                
+                <div class="form-group">
+                    <label for="first_name">First Name</label>
+                    <input id="first_name" maxlength="40" name="first_name" type="text">
+                </div>
+                
+                <div class="form-group">
+                    <label for="last_name" class="required">Last Name</label>
+                    <input id="last_name" maxlength="80" name="last_name" type="text" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input id="email" maxlength="80" name="email" type="email">
+                </div>
+                
+                <div class="form-group">
+                    <label for="company">Company</label>
+                    <input id="company" maxlength="40" name="company" type="text">
+                </div>
+                
+                <div class="form-group">
+                    <label for="city">City</label>
+                    <input id="city" maxlength="40" name="city" type="text">
+                </div>
+                
+                <div class="form-group">
+                    <label for="state">State/Province</label>
+                    <input id="state" maxlength="20" name="state" type="text">
+                </div>
+                
+                <input type="submit" name="submit" value="Become a Community Member">
+                
+                <div class="form-note">
+                    Your information will be used to connect you with Detroit City FC opportunities. 
+                    We respect your privacy and will never share your information.
+                </div>
+            </form>
+        </div>
+        
+        <div class="footer">
+            <p>© 2025 Detroit City FC | <a href="https://www.detcityfc.com" style="color:#003366; text-decoration:underline;">www.detcityfc.com</a> | Building soccer culture in the heart of Detroit</p>
+        </div>
+    </div>
+</body>
+</html>
